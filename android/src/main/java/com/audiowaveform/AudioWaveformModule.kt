@@ -178,8 +178,9 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     fun stopPlayer(obj: ReadableMap, promise: Promise) {
         val key = obj.getString(Constants.playerKey)
         if (key != null) {
-            audioPlayers[key]?.stop(promise)
+            audioPlayers[key]?.stop()
             audioPlayers[key] = null // Release the player after stopping it
+            promise.resolve(true)
         } else {
             promise.reject("stopPlayer Error", "Player key can't be null")
         }
@@ -249,29 +250,43 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     }
 
     @ReactMethod
-    fun stopAllPlayers(promise: Promise) {
-        audioPlayers.values.forEach { player -> player?.stop(promise) }
-        audioPlayers.clear()
+    fun stopAllPlayers(promise: Promise? = null) {
+        try {
+            for ((key, _) in audioPlayers) {
+                audioPlayers[key]?.stop()
+                audioPlayers[key] = null
+            }
+            promise?.resolve(true);
+        } catch (e: Exception) {
+            promise?.reject("error-stopAllPlayers", e.message).let { throw e }
+        }
     }
 
     @ReactMethod
-    fun stopAllWaveFormExtractors(promise: Promise) {
+    fun stopAllWaveFormExtractors(promise: Promise? = null) {
         try {
             waveformExtractorRateLimiter?.reset()
 
-            waveFormExtractors.values.forEach { player -> player?.stop() }
-            waveFormExtractors.clear()
+            for ((key, _) in waveFormExtractors) {
+                waveFormExtractors[key]?.stop()
+                waveFormExtractors[key] = null
+            }
+            promise?.resolve(true);
         } catch (e: Exception) {
             Log.e(Constants.LOG_TAG, "Failed to stop extractors", e)
-            promise.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}")
+            promise?.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}").let { throw e }
         }
     }
 
     @ReactMethod
     fun stopEverything(promise: Promise) {
-        stopAllPlayers(promise)
-        stopAllWaveFormExtractors(promise)
-        if(recorder != null) stopRecording(promise)
+        try {
+            stopAllPlayers()
+            stopAllWaveFormExtractors()
+            if (recorder != null) stopRecording(promise)
+        } catch (e: Exception) {
+            promise.reject("error-stopEverything", e.message)
+        }
     }
 
     @ReactMethod

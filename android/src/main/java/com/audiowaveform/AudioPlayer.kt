@@ -145,7 +145,7 @@ class AudioPlayer(
         }
     }
 
-    fun stop(promise: Promise) {
+    fun stop() {
         stopListening()
         if (playerListener != null) {
             player.removeListener(playerListener!!)
@@ -153,7 +153,6 @@ class AudioPlayer(
         isPlayerPrepared = false
         player.stop()
         player.release()
-        promise.resolve(true)
     }
 
     fun pause(promise: Promise) {

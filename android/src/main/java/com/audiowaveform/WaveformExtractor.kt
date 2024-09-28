@@ -12,7 +12,6 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.nio.ByteBuffer
-import java.util.concurrent.CountDownLatch
 import kotlin.math.pow
 import kotlin.math.sqrt
 import java.io.File
@@ -21,7 +20,7 @@ class WaveformExtractor(
     context: ReactApplicationContext,
     private val path: String,
     private val expectedPoints: Int,
-    private val key: String,
+    val key: String,
     private val extractorCallBack: ExtractorCallBack,
 ): ReactContextBaseJavaModule(context) {
     private var decoder: MediaCodec? = null
@@ -32,7 +31,6 @@ class WaveformExtractor(
 
     @Volatile
     private var inProgress = false
-    private val finishCount = CountDownLatch(1)
     private var inputEof = false
     private var sampleRate = 0
     private var channels = 1
@@ -122,7 +120,6 @@ class WaveformExtractor(
                             Constants.LOG_TAG + " " + e.message,
                             "An error is thrown while decoding the audio file"
                         )
-                        finishCount.countDown()
                     }
 
                     override fun onOutputBufferAvailable(
@@ -171,7 +168,7 @@ class WaveformExtractor(
         }
     }
 
-    var sampleData : MutableList<Float> = mutableListOf()
+    private var sampleData : MutableList<Float> = mutableListOf()
     private var sampleCount = 0L
     private var sampleSum = 0.0
 
@@ -183,7 +180,6 @@ class WaveformExtractor(
 
                 val rms = sqrt(sampleSum / perSamplePoints)
                 sampleData.add(rms.toFloat())
-                extractorCallBack.onProgress(progress)
                 sampleCount = 0
                 sampleSum = 0.0
 
@@ -196,6 +192,7 @@ class WaveformExtractor(
                 // Discard redundant values and release resources
                 if (progress >= 1.0F) {
                     stop()
+                    extractorCallBack.onProgressResolve(progress, sampleData)
                     return true
                 }
             }
@@ -262,14 +259,13 @@ class WaveformExtractor(
         decoder?.stop()
         decoder?.release()
         extractor?.release()
-        finishCount.countDown()
     }
 }
 
 fun MediaCodec.BufferInfo.isEof() = flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0
 
 interface ExtractorCallBack {
-    fun onProgress(value: Float)
+    fun onProgressResolve(value: Float, sample: MutableList<Float>)
     fun onReject(error: String?, message: String?)
     fun onResolve(value: MutableList<MutableList<Float>>)
 }

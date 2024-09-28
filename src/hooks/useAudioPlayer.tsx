@@ -1,4 +1,4 @@
-import { NativeEventEmitter, NativeModules } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { NativeEvents } from '../constants';
 import {
@@ -17,10 +17,27 @@ import {
   type IStopPlayer,
 } from '../types';
 
-export const useAudioPlayer = () => {
+let rateLimitingEnabled = false;
+
+const enableRateLimiting = (androidNbOfParallelAllowedExtraction?: number) => {
+  if (
+    !rateLimitingEnabled &&
+    Platform.OS === 'android' &&
+    !!androidNbOfParallelAllowedExtraction
+  ) {
+    rateLimitingEnabled = true;
+    AudioWaveform.enableRateLimiting(androidNbOfParallelAllowedExtraction);
+  }
+};
+
+export const useAudioPlayer = (
+  androidNbOfParallelAllowedExtraction?: number
+) => {
   const audioPlayerEmitter = new NativeEventEmitter(
     NativeModules.AudioWaveformsEventEmitter
   );
+
+  enableRateLimiting(androidNbOfParallelAllowedExtraction);
 
   const extractWaveformData = (args: IExtractWaveform) =>
     AudioWaveform.extractWaveformData(args);

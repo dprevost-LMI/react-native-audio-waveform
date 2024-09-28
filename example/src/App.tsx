@@ -102,6 +102,7 @@ const RenderListItem = React.memo(
             <Waveform
               containerStyle={styles.staticWaveformView}
               mode="static"
+              androidRateLimiting={2}
               key={item.path}
               playbackSpeed={currentPlaybackSpeed}
               ref={ref}

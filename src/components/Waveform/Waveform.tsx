@@ -59,6 +59,7 @@ export const Waveform = forwardRef<IWaveformRef, IWaveform>((props, ref) => {
     onCurrentProgressChange = () => {},
     candleHeightScale = 3,
     onChangeWaveformLoadState,
+    androidRateLimiting,
   } = props as StaticWaveform & LiveWaveform;
   const viewRef = useRef<View>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -90,7 +91,7 @@ export const Waveform = forwardRef<IWaveformRef, IWaveform>((props, ref) => {
     onCurrentRecordingWaveformData,
     setPlaybackSpeed,
     markPlayerAsUnmounted,
-  } = useAudioPlayer();
+  } = useAudioPlayer(androidRateLimiting);
 
   const { startRecording, stopRecording, pauseRecording, resumeRecording } =
     useAudioRecorder();

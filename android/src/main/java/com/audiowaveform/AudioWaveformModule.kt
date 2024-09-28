@@ -19,6 +19,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJavaModule(context) {
     private var extractors = mutableMapOf<String, WaveformExtractor?>()
@@ -32,6 +33,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     private var bitRate: Int = 128000
     private val handler = Handler(Looper.getMainLooper())
     private var startTime: Long = 0
+    private var waveformExtractorRateLimiter : AudioWaveformExtractorRateLimiter? = null
 
     companion object {
         const val NAME = "AudioWaveform"
@@ -40,6 +42,13 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
 
     override fun getName(): String {
         return NAME
+    }
+
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun enableRateLimiting(nbOfParallelAllowedExtraction: Int = 3) {
+        if(this.waveformExtractorRateLimiter == null) {
+            this.waveformExtractorRateLimiter = AudioWaveformExtractorRateLimiter(nbOfParallelAllowedExtraction)
+        }
     }
 
     @ReactMethod
@@ -54,7 +63,6 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             }
         }
     }
-
 
     @ReactMethod
     fun checkHasAudioRecorderPermission(promise: Promise) {
@@ -127,7 +135,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     fun preparePlayer(
         obj: ReadableMap,
         promise: Promise
-    ) {
+        ) {
         if(audioPlayers.filter { it.value?.isHoldingAudioTrack() == true }.count() >= MAX_NUMBER_OF_AUDIO_PLAYER) {
             promise.reject(Constants.LOG_TAG, "Too many players have been initialized. Please stop some players before continuing")
         }
@@ -254,10 +262,10 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     fun setPlaybackSpeed(obj: ReadableMap, promise: Promise) {
         // If the key doesn't exist or if the value is null or undefined, set default speed to 1.0
         val speed = if (!obj.hasKey(Constants.speed) || obj.isNull(Constants.speed)) {
-            1.0f // Set default speed to 1.0 if null, undefined, or missing
-        } else {
-            obj.getDouble(Constants.speed).toFloat()
-        }
+                    1.0f // Set default speed to 1.0 if null, undefined, or missing
+                } else {
+                    obj.getDouble(Constants.speed).toFloat()
+                }
 
         val key = obj.getString(Constants.playerKey)
         if (key != null) {
@@ -270,48 +278,64 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     private fun initPlayer(playerKey: String) {
         if (audioPlayers[playerKey] == null) {
             val newPlayer = AudioPlayer(
-                reactApplicationContext,
-                playerKey = playerKey,
-            )
+                            reactApplicationContext,
+                            playerKey = playerKey,
+                    )
             audioPlayers[playerKey] = newPlayer
         }
         return
     }
 
     private fun createOrUpdateExtractor(
-        playerKey: String,
-        noOfSamples: Int,
-        path: String?,
-        promise: Promise,
+            playerKey: String,
+            noOfSamples: Int,
+            path: String?,
+            promise: Promise,
     ) {
         if (path == null) {
-            promise.reject("createOrUpdateExtractor Error" , "No Path Provided")
+            promise.reject("createOrUpdateExtractor Error", "No Path Provided")
             return
         }
-        extractors[playerKey] = WaveformExtractor(
+
+        val previousExtractor = extractors[playerKey]
+        val newExtractor = WaveformExtractor(
             context = reactApplicationContext,
             path = path,
             expectedPoints = noOfSamples,
             key = playerKey,
-            extractorCallBack = object : ExtractorCallBack {
-                override fun onProgress(value: Float) {
-                     if (value == 1.0F) {
-                        extractors[playerKey]?.sampleData?.let { data ->
-                            val normalizedData = normalizeWaveformData(data, 0.12f)
-                            val tempArrayForCommunication: MutableList<MutableList<Float>> = mutableListOf(normalizedData)
-                            promise.resolve(Arguments.fromList(tempArrayForCommunication))
-                        }
-                    }
+            extractorCallBack =
+            object : ExtractorCallBack {
+                private var finally = AtomicBoolean(true)
+                fun onFinally() {
+                    if (finally.getAndSet(false)) waveformExtractorRateLimiter?.continueQueue()
+                    extractors.remove(playerKey)
                 }
+
+                override fun onProgressResolve(value: Float, sample: MutableList<Float>) {
+                    val normalizedData = normalizeWaveformData(sample, 0.12f)
+                    val tempArrayForCommunication: MutableList<MutableList<Float>> =
+                        mutableListOf(normalizedData)
+                    promise.resolve(Arguments.fromList(tempArrayForCommunication))
+                    onFinally()
+                }
+
                 override fun onReject(error: String?, message: String?) {
                     promise.reject(error, message)
+                    onFinally()
                 }
+
                 override fun onResolve(value: MutableList<MutableList<Float>>) {
                     promise.resolve(Arguments.fromList(value))
+                    onFinally()
                 }
             }
         )
-        extractors[playerKey]?.startDecode();
+
+        extractors[playerKey] = newExtractor;
+        waveformExtractorRateLimiter?.add(newExtractor, previousExtractor)
+
+        // If rate limiter is not used, we decode just like before
+        if(waveformExtractorRateLimiter == null) newExtractor.startDecode()
     }
 
     private fun normalizeWaveformData(data: MutableList<Float>, scale: Float = 0.25f, threshold: Float = 0.01f): MutableList<Float> {
@@ -334,12 +358,12 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     }
 
     private fun checkPathAndInitialiseRecorder(
-        encoder: Int,
-        outputFormat: Int,
-        sampleRate: Int,
-        bitRate: Int,
-        promise: Promise,
-        obj: ReadableMap?
+            encoder: Int,
+            outputFormat: Int,
+            sampleRate: Int,
+            bitRate: Int,
+            promise: Promise,
+            obj: ReadableMap?
     ) {
 
         var sampleRateVal = sampleRate.toInt();
@@ -369,6 +393,19 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
                 outputFile = File.createTempFile(currentDate, ".m4a", outputDir)
                 path = outputFile.path
                 audioRecorder.initRecorder(
+                        path!!,
+                        recorder,
+                        encoder,
+                        outputFormat,
+                        sampleRateVal,
+                        bitRateVal,
+                        promise,
+                )
+            } catch (e: IOException) {
+                Log.e(Constants.LOG_TAG, "Failed to create file")
+            }
+        } else {
+            audioRecorder.initRecorder(
                     path!!,
                     recorder,
                     encoder,
@@ -376,38 +413,25 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
                     sampleRateVal,
                     bitRateVal,
                     promise,
-                )
-            } catch (e: IOException) {
-                Log.e(Constants.LOG_TAG, "Failed to create file")
-            }
-        } else {
-            audioRecorder.initRecorder(
-                path!!,
-                recorder,
-                encoder,
-                outputFormat,
-                sampleRateVal,
-                bitRateVal,
-                promise,
             )
         }
     }
 
     private val emitLiveRecordValue = object : Runnable {
-        override fun run() {
-            val currentDecibel = getDecibel()
-            val args: WritableMap = Arguments.createMap()
-            if (currentDecibel == Double.NEGATIVE_INFINITY) {
-                args.putDouble(Constants.currentDecibel, 0.0)
-            } else {
-                if (currentDecibel != null) {
+                override fun run() {
+                    val currentDecibel = getDecibel()
+                    val args: WritableMap = Arguments.createMap()
+                    if (currentDecibel == Double.NEGATIVE_INFINITY) {
+                        args.putDouble(Constants.currentDecibel, 0.0)
+                    } else {
+                        if (currentDecibel != null) {
                     args.putDouble(Constants.currentDecibel, currentDecibel/1000)
+                        }
+                    }
+                    handler.postDelayed(this, UpdateFrequency.Low.value)
+            reactApplicationContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)?.emit(Constants.onCurrentRecordingWaveformData, args)
                 }
             }
-            handler.postDelayed(this, UpdateFrequency.Low.value)
-            reactApplicationContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)?.emit(Constants.onCurrentRecordingWaveformData, args)
-        }
-    }
 
     private fun startEmittingRecorderValue() {
         handler.postDelayed(emitLiveRecordValue, UpdateFrequency.Low.value)

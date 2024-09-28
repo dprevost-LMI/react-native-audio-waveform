@@ -148,6 +148,13 @@ export interface IAudioWaveforms extends NativeModule {
   // Player
 
   /**
+   * When having multiple players, this method can be used to limit the number of parallel extractions of waveform data on Android only.
+   * @param nbOfParallelAllowedExtraction - number of parallel extractions allowed at the same time.
+   * @returns nothing
+   */
+  enableRateLimiting(nbOfParallelAllowedExtraction: number): void;
+
+  /**
    * Prepares the player for playback.
    * @param args - Arguments for preparing the player.
    * @returns A promise that resolves to a boolean indicating if the player was prepared successfully.

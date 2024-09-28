@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
   Image,
   Linking,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -71,6 +72,11 @@ const RenderListItem = React.memo(
     };
 
     useEffect(() => {
+      if(Platform.OS === 'android') AudioWaveform.enableRateLimiting(2);
+    });
+
+
+    useEffect(() => {
       if (currentPlaying !== item.path) {
         ref.current?.stopPlayer();
       } else {
@@ -103,7 +109,6 @@ const RenderListItem = React.memo(
             <Waveform
               containerStyle={styles.staticWaveformView}
               mode="static"
-              androidRateLimiting={2}
               key={item.path}
               playbackSpeed={currentPlaybackSpeed}
               ref={ref}

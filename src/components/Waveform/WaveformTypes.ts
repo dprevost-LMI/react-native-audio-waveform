@@ -29,7 +29,6 @@ export interface StaticWaveform extends BaseWaveform {
   ) => void;
   onChangeWaveformLoadState?: (state: boolean) => void;
   playbackSpeed?: PlaybackSpeedType;
-  androidRateLimiting?: number;
 }
 
 export interface LiveWaveform extends BaseWaveform {

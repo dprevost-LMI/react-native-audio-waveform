@@ -17,27 +17,10 @@ import {
   type IStopPlayer,
 } from '../types';
 
-let rateLimitingEnabled = false;
-
-const enableRateLimiting = (androidNbOfParallelAllowedExtraction?: number) => {
-  if (
-    !rateLimitingEnabled &&
-    Platform.OS === 'android' &&
-    !!androidNbOfParallelAllowedExtraction
-  ) {
-    rateLimitingEnabled = true;
-    AudioWaveform.enableRateLimiting(androidNbOfParallelAllowedExtraction);
-  }
-};
-
-export const useAudioPlayer = (
-  androidNbOfParallelAllowedExtraction?: number
-) => {
+export const useAudioPlayer = () => {
   const audioPlayerEmitter = new NativeEventEmitter(
     NativeModules.AudioWaveformsEventEmitter
   );
-
-  enableRateLimiting(androidNbOfParallelAllowedExtraction);
 
   const extractWaveformData = (args: IExtractWaveform) =>
     AudioWaveform.extractWaveformData(args);
@@ -56,6 +39,9 @@ export const useAudioPlayer = (
   const setVolume = (args: ISetVolume) => AudioWaveform.setVolume(args);
 
   const stopAllPlayers = () => AudioWaveform.stopAllPlayers();
+
+  const stopAllWaveFormExtractors = () =>
+    Platform.OS === 'android' && AudioWaveform.stopAllWaveFormExtractors();
 
   const getDuration = (args: IGetDuration) => AudioWaveform.getDuration(args);
 
@@ -105,6 +91,7 @@ export const useAudioPlayer = (
     seekToPlayer,
     setVolume,
     stopAllPlayers,
+    stopAllWaveFormExtractors,
     stopPlayer,
     onDidFinishPlayingAudio,
     onCurrentDuration,

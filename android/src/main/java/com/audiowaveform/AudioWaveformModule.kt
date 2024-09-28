@@ -22,7 +22,7 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJavaModule(context) {
-    private var extractors = mutableMapOf<String, WaveformExtractor?>()
+    private var waveFormExtractors = mutableMapOf<String, WaveformExtractor?>()
     private var audioPlayers = mutableMapOf<String, AudioPlayer?>()
     private var audioRecorder: AudioRecorder = AudioRecorder()
     private var recorder: MediaRecorder? = null
@@ -255,12 +255,12 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     }
 
     @ReactMethod
-    fun stopExtractors(promise: Promise) {
+    fun stopAllWaveFormExtractors(promise: Promise) {
         try {
             waveformExtractorRateLimiter?.reset()
 
-            extractors.values.forEach { player -> player?.stop() }
-            extractors.clear()
+            waveFormExtractors.values.forEach { player -> player?.stop() }
+            waveFormExtractors.clear()
         } catch (e: Exception) {
             Log.e(Constants.LOG_TAG, "Failed to stop extractors", e)
             promise.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}")
@@ -270,8 +270,8 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     @ReactMethod
     fun stopEverything(promise: Promise) {
         stopAllPlayers(promise)
-        stopExtractors(promise)
-        stopRecording(promise)
+        stopAllWaveFormExtractors(promise)
+        if(recorder != null) stopRecording(promise)
     }
 
     @ReactMethod
@@ -313,7 +313,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             return
         }
 
-        val previousExtractor = extractors[playerKey]
+        val previousExtractor = waveFormExtractors[playerKey]
         val newExtractor = WaveformExtractor(
             context = reactApplicationContext,
             path = path,
@@ -324,7 +324,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
                 private var finally = AtomicBoolean(true)
                 fun onFinally() {
                     if (finally.getAndSet(false)) waveformExtractorRateLimiter?.continueQueue()
-                    extractors.remove(playerKey)
+                    waveFormExtractors.remove(playerKey)
                 }
 
                 override fun onProgressResolve(value: Float, sample: MutableList<Float>) {
@@ -347,7 +347,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             }
         )
 
-        extractors[playerKey] = newExtractor;
+        waveFormExtractors[playerKey] = newExtractor;
         waveformExtractorRateLimiter?.add(newExtractor, previousExtractor)
 
         // If rate limiter is not used, we decode just like before

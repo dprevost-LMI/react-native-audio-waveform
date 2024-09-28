@@ -46,8 +46,8 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
 
     @ReactMethod(isBlockingSynchronousMethod = true)
     fun enableRateLimiting(nbOfParallelAllowedExtraction: Int = 3) {
-        if(this.waveformExtractorRateLimiter == null) {
-            this.waveformExtractorRateLimiter = AudioWaveformExtractorRateLimiter(nbOfParallelAllowedExtraction)
+        if (waveformExtractorRateLimiter == null) {
+            waveformExtractorRateLimiter = AudioWaveformExtractorRateLimiter(nbOfParallelAllowedExtraction)
         }
     }
 

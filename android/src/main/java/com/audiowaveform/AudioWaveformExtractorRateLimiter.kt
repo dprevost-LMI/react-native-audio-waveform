@@ -4,19 +4,14 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.properties.Delegates
 
-class AudioWaveformExtractorRateLimiter() {
-    constructor(nbOfParallelAllowedExtraction: Int = 3) : this() {
-        this.nbOfParallelAllowedExtraction = nbOfParallelAllowedExtraction
-        this.nbOfAllowedExtraction = AtomicInteger(nbOfParallelAllowedExtraction)
-    }
+class AudioWaveformExtractorRateLimiter(private var nbOfParallelAllowedExtraction: Int = 3) {
 
-    private var nbOfParallelAllowedExtraction by Delegates.notNull<Int>()
-    private lateinit var nbOfAllowedExtraction: AtomicInteger
+    private val nbOfAllowedExtraction = AtomicInteger(nbOfParallelAllowedExtraction)
     private val extractionQueue: ConcurrentLinkedQueue<WaveformExtractor> = ConcurrentLinkedQueue()
 
     fun add(waveformExtractor: WaveformExtractor, previousExtractor: WaveformExtractor?) {
         extractionQueue.add(waveformExtractor)
-        previousExtractor.let { extractionQueue.remove(it) }
+        previousExtractor?.let { extractionQueue.remove(it) }
         processQueue()
     }
 
@@ -36,8 +31,8 @@ class AudioWaveformExtractorRateLimiter() {
     }
 
     fun reset() {
-        extractionQueue.onEach { extractor -> extractor.stop() }
+        extractionQueue.forEach { it.stop() }
         extractionQueue.clear()
-        this.nbOfAllowedExtraction.set(this.nbOfParallelAllowedExtraction)
+        nbOfAllowedExtraction.set(nbOfParallelAllowedExtraction)
     }
 }

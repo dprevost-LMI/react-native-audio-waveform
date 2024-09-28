@@ -258,7 +258,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             }
             promise?.resolve(true);
         } catch (e: Exception) {
-            promise?.reject("error-stopAllPlayers", e.message).let { throw e }
+            promise?.reject("error-stopAllPlayers", e.message) ?: throw e
         }
     }
 
@@ -274,7 +274,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             promise?.resolve(true);
         } catch (e: Exception) {
             Log.e(Constants.LOG_TAG, "Failed to stop extractors", e)
-            promise?.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}").let { throw e }
+            promise?.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}") ?: throw e
         }
     }
 

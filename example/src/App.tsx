@@ -39,6 +39,7 @@ import {
 } from './constants';
 import stylesheet from './styles';
 import { Colors } from './theme';
+import { AudioWaveform } from '../../src/AudioWaveform';
 
 const RenderListItem = React.memo(
   ({
@@ -126,12 +127,12 @@ const RenderListItem = React.memo(
                 console.log(error, 'we are in example');
               }}
               onCurrentProgressChange={(currentProgress, songDuration) => {
-                console.log(
-                  'currentProgress ',
-                  currentProgress,
-                  'songDuration ',
-                  songDuration
-                );
+                // console.log(
+                //   'currentProgress ',
+                //   currentProgress,
+                //   'songDuration ',
+                //   songDuration
+                // );
               }}
               onChangeWaveformLoadState={state => {
                 setIsLoading(state);
@@ -248,6 +249,15 @@ const AppContainer = () => {
     );
   };
 
+  const stopEverything = () => { 
+    AudioWaveform.stopEverything().then(() => {
+      console.log('stopped everything successfully');
+    }).catch((e) => {
+      console.log('error stopping everything', e);
+    })
+
+  };
+
   return (
     <View style={styles.appContainer}>
       <StatusBar
@@ -260,11 +270,13 @@ const AppContainer = () => {
         <View style={styles.screenBackground}>
           <View style={styles.container}>
             <View style={styles.simformImageContainer}>
-              <Image
-                source={Icons.simform}
-                style={styles.simformImage}
-                resizeMode="contain"
-              />
+            <Pressable onPress={stopEverything}>
+                <Image
+                  source={Icons.simform}
+                  style={styles.simformImage}
+                  resizeMode="contain"
+                />
+            </Pressable>
             </View>
             <ScrollView scrollEnabled={shouldScroll}>
               {list.map(item => (

@@ -2,13 +2,16 @@ package com.audiowaveform
 
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicInteger
+import kotlin.properties.Delegates
 
 class AudioWaveformExtractorRateLimiter() {
     constructor(nbOfParallelAllowedExtraction: Int = 3) : this() {
-        this.nbOfParallelAllowedExtraction = AtomicInteger(nbOfParallelAllowedExtraction)
+        this.nbOfParallelAllowedExtraction = nbOfParallelAllowedExtraction
+        this.nbOfAllowedExtraction = AtomicInteger(nbOfParallelAllowedExtraction)
     }
 
-    private lateinit var nbOfParallelAllowedExtraction: AtomicInteger
+    private var nbOfParallelAllowedExtraction by Delegates.notNull<Int>()
+    private lateinit var nbOfAllowedExtraction: AtomicInteger
     private val extractionQueue: ConcurrentLinkedQueue<WaveformExtractor> = ConcurrentLinkedQueue()
 
     fun add(waveformExtractor: WaveformExtractor, previousExtractor: WaveformExtractor?) {
@@ -18,17 +21,23 @@ class AudioWaveformExtractorRateLimiter() {
     }
 
     fun continueQueue() {
-        nbOfParallelAllowedExtraction.incrementAndGet()
+        nbOfAllowedExtraction.incrementAndGet()
         processQueue()
     }
 
     @Synchronized
     private fun getNext(): WaveformExtractor? {
-        return if (extractionQueue.isEmpty() || nbOfParallelAllowedExtraction.get() <= 0) null
-        else extractionQueue.poll()?.also { nbOfParallelAllowedExtraction.decrementAndGet() }
+        return if (extractionQueue.isEmpty() || nbOfAllowedExtraction.get() <= 0) null
+        else extractionQueue.poll()?.also { nbOfAllowedExtraction.decrementAndGet() }
     }
 
     private fun processQueue() {
         getNext()?.startDecode()
+    }
+
+    fun reset() {
+        extractionQueue.onEach { extractor -> extractor.stop() }
+        extractionQueue.clear()
+        this.nbOfAllowedExtraction.set(this.nbOfParallelAllowedExtraction)
     }
 }

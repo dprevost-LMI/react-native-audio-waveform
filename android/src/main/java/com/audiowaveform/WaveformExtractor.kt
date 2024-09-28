@@ -253,7 +253,7 @@ class WaveformExtractor(
         }
     }
 
-    private fun stop() {
+    fun stop() {
         if (!inProgress) return
         inProgress = false
         decoder?.stop()

@@ -210,6 +210,13 @@ export interface IAudioWaveforms extends NativeModule {
   stopAllPlayers(): Promise<boolean>;
 
   /**
+   * Stops all active audio players, all waveform extractions, recording and clean some resources.
+   * Useful when needing to stop everything and start fresh like when navigating to a new screen.
+   * @returns A promise that resolves to a boolean indicating if everything was stopped successfully.
+   */
+  stopEverything(): Promise<boolean>;
+
+  /**
    * Sets the playback speed of the audio.
    * @param args - The playback speed to set, where 1.0 is normal speed.
    * @returns A promise that resolves to a boolean indicating if the playback speed was set successfully.

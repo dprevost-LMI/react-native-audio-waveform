@@ -58,9 +58,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
         }
 
         audioPlayers.values.forEach { player ->
-            if (player != null) {
-                player.markPlayerAsUnmounted()
-            }
+            player?.markPlayerAsUnmounted()
         }
     }
 
@@ -109,7 +107,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
 
     @ReactMethod
     fun stopRecording(promise: Promise) {
-        if (audioRecorder == null || recorder == null || path == null) {
+        if (recorder == null || path == null) {
             promise.reject("STOP_RECORDING_ERROR", "Recording resources not properly initialized")
             return
         }
@@ -252,10 +250,28 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
 
     @ReactMethod
     fun stopAllPlayers(promise: Promise) {
-        for ((key, _) in audioPlayers) {
-            audioPlayers[key]?.stop(promise)
-            audioPlayers[key] = null
+        audioPlayers.values.forEach { player -> player?.stop(promise) }
+        audioPlayers.clear()
+    }
+
+    @ReactMethod
+    fun stopExtractors(promise: Promise) {
+        try {
+            waveformExtractorRateLimiter?.reset()
+
+            extractors.values.forEach { player -> player?.stop() }
+            extractors.clear()
+        } catch (e: Exception) {
+            Log.e(Constants.LOG_TAG, "Failed to stop extractors", e)
+            promise.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}")
         }
+    }
+
+    @ReactMethod
+    fun stopEverything(promise: Promise) {
+        stopAllPlayers(promise)
+        stopExtractors(promise)
+        stopRecording(promise)
     }
 
     @ReactMethod

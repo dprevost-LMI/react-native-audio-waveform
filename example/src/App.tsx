@@ -72,7 +72,7 @@ const RenderListItem = React.memo(
     };
 
     useEffect(() => {
-      if(Platform.OS === 'android') AudioWaveform.enableRateLimiting(2);
+      // if(Platform.OS === 'android') AudioWaveform.enableRateLimiting(2);
     });
 
 

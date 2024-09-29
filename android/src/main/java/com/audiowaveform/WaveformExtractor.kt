@@ -6,15 +6,17 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.net.Uri
 import android.os.Build
+import android.util.Log
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import java.io.File
 import java.nio.ByteBuffer
+import kotlin.math.log
 import kotlin.math.pow
 import kotlin.math.sqrt
-import java.io.File
 
 class WaveformExtractor(
     context: ReactApplicationContext,
@@ -23,11 +25,15 @@ class WaveformExtractor(
     val key: String,
     private val extractorCallBack: ExtractorCallBack,
 ): ReactContextBaseJavaModule(context) {
+    private val TAG = "WaveformExtractor"
     private var decoder: MediaCodec? = null
     private var extractor: MediaExtractor? = null
+    var extractionTime: Long = 0
     private var duration = 0L
     private var progress = 0F
     private var currentProgress = 0F
+
+    private var mAudioExtractedFrameCount = 0
 
     @Volatile
     private var inProgress = false
@@ -60,26 +66,57 @@ class WaveformExtractor(
         return null
     }
 
+    private val DECODE_INPUT_SIZE = 524288 // 524288 Bytes = 0.5 MB
+    private val BUFFER_OVERFLOW_SAFE_GATE = 5000
     fun startDecode() {
         try {
             if (!File(path).exists()) {
-                extractorCallBack.onReject("File Error", "File does not exist at the given path.")
+            extractorCallBack.onReject("File Error", "File does not exist at the given path.")
                 return
             }
 
             val format = getFormat(path) ?: error("No audio format found")
+            Log.d(TAG, "startDecode: $path")
             val mime = format.getString(MediaFormat.KEY_MIME) ?: error("No MIME type found")
+            format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, DECODE_INPUT_SIZE)
             decoder = MediaCodec.createDecoderByType(mime).also {
                 it.configure(format, null, null, 0)
                 it.setCallback(object : MediaCodec.Callback() {
                     override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {
                         if (inputEof || !inProgress) return
                         val extractor = extractor ?: return
+
+                        var bufferChunkSize = 0
+                        var presentationTime: Long = 0
+
                         codec.getInputBuffer(index)?.let { buf ->
-                            val size = extractor.readSampleData(buf, 0)
-                            if (size > 0) {
-                                codec.queueInputBuffer(index, 0, size, extractor.sampleTime, 0)
-                                extractor.advance()
+                            while (true) {
+                                var size: Int
+                                var tempBuffer: ByteBuffer
+                                try {
+                                    tempBuffer = ByteBuffer.allocate(1 shl 10)
+                                    size = extractor.readSampleData(tempBuffer, 0)
+                                } catch (e: IllegalArgumentException) {
+                                    Log.d(TAG, "retrying with bigger buffer")
+                                    // Buffer is surely too small going with the big guns
+                                    tempBuffer = ByteBuffer.allocate(buf.capacity())
+                                    size = extractor.readSampleData(tempBuffer, 0)
+                                }
+
+                                if (size > 0) {
+                                    bufferChunkSize += size
+                                    buf.put(tempBuffer)
+                                    presentationTime += extractor.sampleTime
+                                }
+                                val mAudioExtractorDone = !extractor.advance() || size == -1;
+                                mAudioExtractedFrameCount++;
+                                if (bufferChunkSize > (DECODE_INPUT_SIZE - BUFFER_OVERFLOW_SAFE_GATE) || mAudioExtractorDone || !inProgress) {
+                                    break;
+                                }
+                            }
+
+                            if (bufferChunkSize > 0) {
+                                codec.queueInputBuffer(index, 0, bufferChunkSize, presentationTime, extractor.sampleFlags)
                             } else {
                                 codec.queueInputBuffer(
                                     index,
@@ -94,9 +131,12 @@ class WaveformExtractor(
                     }
 
                     override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
-                        if(!inProgress) return
+                        if (!inProgress) return
+                        Log.d(TAG, "onOutputFormatChanged: ")
                         sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        Log.d(TAG, "onOutputFormatChanged-sampleRate:$sampleRate")
+                        Log.d(TAG, "onOutputFormatChanged-channels:$channels")
                         pcmEncodingBit = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                             if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
                                 when (format.getInteger(MediaFormat.KEY_PCM_ENCODING)) {
@@ -113,6 +153,8 @@ class WaveformExtractor(
                         }
                         totalSamples = sampleRate.toLong() * duration
                         perSamplePoints = (totalSamples / expectedPoints)
+                        Log.d(TAG, "onOutputFormatChanged-totalSamples: $totalSamples")
+                        Log.d(TAG, "onOutputFormatChanged-perSamplePoints: $perSamplePoints")
                     }
 
                     override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {
@@ -129,28 +171,26 @@ class WaveformExtractor(
                     ) {
                         if (inProgress && info.size > 0) {
                             codec.getOutputBuffer(index)?.let { buf ->
+                                Log.d(TAG, "onOutputBufferAvailable-buf-capacity: " + buf.capacity())
                                 val size = info.size
+                                Log.d(TAG, "onOutputBufferAvailable-size: $size")
                                 buf.position(info.offset)
                                 when (pcmEncodingBit) {
-                                    8 -> {
-                                        handle8bit(size, buf)
-                                    }
                                     16 -> {
                                         handle16bit(size, buf)
                                     }
-                                    32 -> {
-                                        handle32bit(size, buf)
-                                    }
                                 }
                                 // Releasing only if not stopped else we are getting IllegalStateException inaccessible buffer
-                                if(inProgress) codec.releaseOutputBuffer(index, false)
+                                if (inProgress) codec.releaseOutputBuffer(index, false)
                             }
                         }
 
                         if (info.isEof()) {
                             stop()
-                            val tempArrayForCommunication : MutableList<MutableList<Float>> = mutableListOf()
+                            val tempArrayForCommunication: MutableList<MutableList<Float>> =
+                                mutableListOf()
                             tempArrayForCommunication.add(sampleData)
+                            Log.d(TAG, "isEof:" + sampleData.size)
                             extractorCallBack.onResolve(tempArrayForCommunication)
                         }
                     }
@@ -162,10 +202,11 @@ class WaveformExtractor(
         } catch (e: Exception) {
             stop()
             extractorCallBack.onReject(
-                e.message , "An error is thrown before decoding the audio file"
+                e.message, "An error is thrown before decoding the audio file"
             )
 
         }
+
     }
 
     private var sampleData : MutableList<Float> = mutableListOf()
@@ -176,9 +217,17 @@ class WaveformExtractor(
         try {
             if (sampleCount == perSamplePoints) {
                 currentProgress++
+                Log.d(TAG, "rms-currentProgress: $currentProgress ")
                 progress = (currentProgress / expectedPoints)
+                Log.d(TAG, "rms-perSamplePoints: $expectedPoints ")
+                Log.d(TAG, "rms-progress: $progress ")
 
                 val rms = sqrt(sampleSum / perSamplePoints)
+
+                Log.d(TAG, "rms-sampleSum: $sampleSum ")
+                Log.d(TAG, "rms-perSamplePoints: $perSamplePoints ")
+                Log.d(TAG, "rms-rms: $rms ")
+
                 sampleData.add(rms.toFloat())
                 sampleCount = 0
                 sampleSum = 0.0
@@ -190,11 +239,11 @@ class WaveformExtractor(
                 reactApplicationContext?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)?.emit(Constants.onCurrentExtractedWaveformData, argsParams)
 
                 // Discard redundant values and release resources
-                if (progress >= 1.0F) {
-                    stop()
-                    extractorCallBack.onProgressResolve(progress, sampleData)
-                    return true
-                }
+//                if (progress >= 1.0F) {
+//                    stop()
+//                    extractorCallBack.onProgressResolve(progress, sampleData)
+//                    return true
+//                }
             }
         }
         catch (e: Exception) {
@@ -207,18 +256,6 @@ class WaveformExtractor(
         return false;
     }
 
-    private fun handle8bit(size: Int, buf: ByteBuffer) {
-        run blockRepeat@ {
-            repeat(size / if (channels == 2) 2 else 1) {
-                val result = buf.get().toInt() / 128f
-                if (channels == 2) {
-                    buf.get()
-                }
-                if (rms(result)) return@blockRepeat
-            }
-        }
-    }
-
     private fun handle16bit(size: Int, buf: ByteBuffer) {
         run blockRepeat@{
             repeat(size / if (channels == 2) 4 else 2) {
@@ -226,25 +263,6 @@ class WaveformExtractor(
                 val second = buf.get().toInt() shl 8
                 val value = (first or second) / 32767f
                 if (channels == 2) {
-                    buf.get()
-                    buf.get()
-                }
-                if (rms(value)) return@blockRepeat
-            }
-        }
-    }
-
-    private fun handle32bit(size: Int, buf: ByteBuffer) {
-        run blockRepeat@{
-            repeat(size / if (channels == 2) 8 else 4) {
-                val first = buf.get().toLong()
-                val second = buf.get().toLong() shl 8
-                val third = buf.get().toLong() shl 16
-                val forth = buf.get().toLong() shl 24
-                val value = (first or second or third or forth) / "2147483648f".toFloat()
-                if (channels == 2) {
-                    buf.get()
-                    buf.get()
                     buf.get()
                     buf.get()
                 }

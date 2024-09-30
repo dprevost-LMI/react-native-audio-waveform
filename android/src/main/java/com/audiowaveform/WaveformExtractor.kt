@@ -85,37 +85,30 @@ class WaveformExtractor(
                         if (inputEof || !inProgress) return
                         val extractor = extractor ?: return
 
-                        var bufferChunkSize = 0
-                        var presentationTime: Long = 0
 
                         codec.getInputBuffer(index)?.let { buf ->
-                            while (true) {
-                                var size: Int
-                                var tempBuffer: ByteBuffer
-                                try {
-                                    tempBuffer = ByteBuffer.allocate(8192)
-                                    size = extractor.readSampleData(tempBuffer, 0)
-                                } catch (e: IllegalArgumentException) {
-                                    Log.d(TAG, "retrying with bigger buffer")
-                                    // Buffer is surely too small going with the big guns
-                                    tempBuffer = ByteBuffer.allocate(buf.capacity())
-                                    size = extractor.readSampleData(tempBuffer, 0)
-                                }
+                            var presentationTime: Long = 0
+                            var totalSize = 0
+                            var stop = false
+
+                            while (totalSize < buf.capacity() - BUFFER_OVERFLOW_SAFE_GATE) {
+                                val size = extractor.readSampleData(buf, totalSize)
 
                                 if (size > 0) {
-                                    bufferChunkSize += size
-                                    buf.put(tempBuffer)
+                                    totalSize += size
                                     presentationTime += extractor.sampleTime
+                                    mAudioExtractedFrameCount++;
+
+                                    stop = !extractor.advance()
                                 }
-                                val mAudioExtractorDone = !extractor.advance() || size == -1;
-                                mAudioExtractedFrameCount++;
-                                if (bufferChunkSize > (DECODE_INPUT_SIZE - BUFFER_OVERFLOW_SAFE_GATE) || mAudioExtractorDone || !inProgress) {
+
+                                if (stop || size == -1 || !inProgress) {
                                     break;
                                 }
                             }
 
-                            if (bufferChunkSize > 0) {
-                                codec.queueInputBuffer(index, 0, bufferChunkSize, presentationTime, extractor.sampleFlags)
+                            if (totalSize > 0) {
+                                codec.queueInputBuffer(index, 0, totalSize, presentationTime, extractor.sampleFlags)
                             } else {
                                 codec.queueInputBuffer(
                                     index,

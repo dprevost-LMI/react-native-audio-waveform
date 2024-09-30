@@ -20,8 +20,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.log
 
 class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJavaModule(context) {
+    private val TAG = "AudioWaveformModule"
     private var waveFormExtractors = mutableMapOf<String, WaveformExtractor?>()
     private var audioPlayers = mutableMapOf<String, AudioPlayer?>()
     private var audioRecorder: AudioRecorder = AudioRecorder()
@@ -34,6 +36,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     private val handler = Handler(Looper.getMainLooper())
     private var startTime: Long = 0
     private var waveformExtractorRateLimiter : AudioWaveformExtractorRateLimiter? = null
+    private var allTime: Long = 0
 
     companion object {
         const val NAME = "AudioWaveform"
@@ -253,8 +256,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     fun stopAllPlayers(promise: Promise? = null) {
         try {
             for ((key, _) in audioPlayers) {
-                audioPlayers[key]?.stop()
-                audioPlayers[key] = null
+                audioPlayers.remove(key)?.stop()
             }
             promise?.resolve(true);
         } catch (e: Exception) {
@@ -268,8 +270,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             waveformExtractorRateLimiter?.reset()
 
             for ((key, _) in waveFormExtractors) {
-                waveFormExtractors[key]?.stop()
-                waveFormExtractors[key] = null
+                waveFormExtractors.remove(key)?.stop()
             }
             promise?.resolve(true);
         } catch (e: Exception) {
@@ -280,6 +281,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
 
     @ReactMethod
     fun stopEverything(promise: Promise) {
+        Log.d(TAG, "Time all: $allTime")
         try {
             stopAllPlayers()
             stopAllWaveFormExtractors()
@@ -338,11 +340,17 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             object : ExtractorCallBack {
                 private var finally = AtomicBoolean(true)
                 fun onFinally() {
-                    if (finally.getAndSet(false)) waveformExtractorRateLimiter?.continueQueue()
-                    waveFormExtractors.remove(playerKey)
+                    if (finally.getAndSet(false)) {
+                        waveformExtractorRateLimiter?.continueQueue()
+                        waveFormExtractors.remove(playerKey).also {
+                            allTime += it?.extractionTime ?: 0
+                            Log.d(TAG, "$playerKey: ${it?.extractionTime}")
+                        }
+                    }
                 }
 
                 override fun onProgressResolve(value: Float, sample: MutableList<Float>) {
+                    Log.d(TAG, "onProgressResolve: " + sample.size)
                     val normalizedData = normalizeWaveformData(sample, 0.12f)
                     val tempArrayForCommunication: MutableList<MutableList<Float>> =
                         mutableListOf(normalizedData)

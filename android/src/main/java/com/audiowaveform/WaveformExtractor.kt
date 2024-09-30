@@ -14,7 +14,6 @@ import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.io.File
 import java.nio.ByteBuffer
-import kotlin.math.log
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -94,7 +93,7 @@ class WaveformExtractor(
                                 var size: Int
                                 var tempBuffer: ByteBuffer
                                 try {
-                                    tempBuffer = ByteBuffer.allocate(1 shl 10)
+                                    tempBuffer = ByteBuffer.allocate(8192)
                                     size = extractor.readSampleData(tempBuffer, 0)
                                 } catch (e: IllegalArgumentException) {
                                     Log.d(TAG, "retrying with bigger buffer")
@@ -132,11 +131,9 @@ class WaveformExtractor(
 
                     override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {
                         if (!inProgress) return
-                        Log.d(TAG, "onOutputFormatChanged: ")
                         sampleRate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
-                        Log.d(TAG, "onOutputFormatChanged-sampleRate:$sampleRate")
-                        Log.d(TAG, "onOutputFormatChanged-channels:$channels")
+
                         pcmEncodingBit = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                             if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) {
                                 when (format.getInteger(MediaFormat.KEY_PCM_ENCODING)) {
@@ -153,8 +150,6 @@ class WaveformExtractor(
                         }
                         totalSamples = sampleRate.toLong() * duration
                         perSamplePoints = (totalSamples / expectedPoints)
-                        Log.d(TAG, "onOutputFormatChanged-totalSamples: $totalSamples")
-                        Log.d(TAG, "onOutputFormatChanged-perSamplePoints: $perSamplePoints")
                     }
 
                     override fun onError(codec: MediaCodec, e: MediaCodec.CodecException) {
@@ -171,9 +166,7 @@ class WaveformExtractor(
                     ) {
                         if (inProgress && info.size > 0) {
                             codec.getOutputBuffer(index)?.let { buf ->
-                                Log.d(TAG, "onOutputBufferAvailable-buf-capacity: " + buf.capacity())
                                 val size = info.size
-                                Log.d(TAG, "onOutputBufferAvailable-size: $size")
                                 buf.position(info.offset)
                                 when (pcmEncodingBit) {
                                     16 -> {
@@ -217,16 +210,10 @@ class WaveformExtractor(
         try {
             if (sampleCount == perSamplePoints) {
                 currentProgress++
-                Log.d(TAG, "rms-currentProgress: $currentProgress ")
                 progress = (currentProgress / expectedPoints)
-                Log.d(TAG, "rms-perSamplePoints: $expectedPoints ")
-                Log.d(TAG, "rms-progress: $progress ")
+
 
                 val rms = sqrt(sampleSum / perSamplePoints)
-
-                Log.d(TAG, "rms-sampleSum: $sampleSum ")
-                Log.d(TAG, "rms-perSamplePoints: $perSamplePoints ")
-                Log.d(TAG, "rms-rms: $rms ")
 
                 sampleData.add(rms.toFloat())
                 sampleCount = 0
@@ -239,11 +226,11 @@ class WaveformExtractor(
                 reactApplicationContext?.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)?.emit(Constants.onCurrentExtractedWaveformData, argsParams)
 
                 // Discard redundant values and release resources
-//                if (progress >= 1.0F) {
-//                    stop()
-//                    extractorCallBack.onProgressResolve(progress, sampleData)
-//                    return true
-//                }
+                if (progress >= 1.0F) {
+                    stop()
+                    extractorCallBack.onProgressResolve(progress, sampleData)
+                    return true
+                }
             }
         }
         catch (e: Exception) {

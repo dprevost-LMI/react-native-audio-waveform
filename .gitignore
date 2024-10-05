@@ -63,5 +63,6 @@ buck-out/
 # generated
 lib
 
+# Local history vs code plugin
 .history/
 *.tgz

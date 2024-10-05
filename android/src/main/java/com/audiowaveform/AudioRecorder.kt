@@ -26,28 +26,16 @@ class AudioRecorder {
         return activity?.let { ActivityCompat.checkSelfPermission(it, permissions[0]) }
     }
 
-    fun checkPermission(activity: Activity?, promise: Promise): String {
-        val permissionResponse = isPermissionGranted(activity)
-        if (permissionResponse === PackageManager.PERMISSION_GRANTED) {
-            promise.resolve("granted")
-            return "granted"
-        } else {
-            promise.resolve("denied")
-            return "denied"
-        }
+    fun checkPermission(activity: Activity?): String {
+        return if (isPermissionGranted(activity) == PackageManager.PERMISSION_GRANTED) "granted" else "denied"
     }
 
-    fun getPermission(activity: Activity?, promise: Promise): String {
-        val permissionResponse = isPermissionGranted(activity)
-        if (permissionResponse === PackageManager.PERMISSION_GRANTED) {
-            promise.resolve("granted");
+    fun getPermission(activity: Activity?): String {
+        if (isPermissionGranted(activity) == PackageManager.PERMISSION_GRANTED) {
             return "granted"
         } else {
             activity?.let {
-                ActivityCompat.requestPermissions(
-                    it, permissions,
-                    RECORD_AUDIO_REQUEST_CODE
-                )
+                ActivityCompat.requestPermissions(it, permissions, RECORD_AUDIO_REQUEST_CODE)
             }
             return "denied"
         }

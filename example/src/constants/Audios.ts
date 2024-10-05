@@ -115,6 +115,11 @@ const copyFilesToNativeResources = async (): Promise<string[]> => {
   return audioAssetArray;
 };
 
+const getRecordedAudio = async (): Promise<string[]> => {
+  const items = await fs.readDir(fs.CachesDirectoryPath)
+  return items.filter(item =>  item.path.endsWith('.m4a')).map(item => item.path)
+}
+
 /**
  * Generate a list of file objects with information about successfully copied files (Android)
  * or all files (iOS).
@@ -128,4 +133,11 @@ export const generateAudioList = async (): Promise<ListItem[]> => {
     fromCurrentUser: index % 2 !== 0,
     path: `${filePath}/${value}`,
   }));
+
+  const recordedAudioFilePaths = (await getRecordedAudio()).map((value, index) => ({
+    fromCurrentUser: index % 2 !== 0,
+    path: value,
+  }));
+
+   return [...providedAudioFilePaths, ...recordedAudioFilePaths];
 };

@@ -148,6 +148,14 @@ export interface IAudioWaveforms extends NativeModule {
   // Player
 
   /**
+   * Android only
+   * When having multiple players, this method can be used to limit the number of parallel extractions of waveform data.
+   * @param nbOfParallelAllowedExtraction - number of parallel extractions allowed at the same time.
+   * @returns nothing
+   */
+  enableRateLimiting(nbOfParallelAllowedExtraction: number): void;
+
+  /**
    * Prepares the player for playback.
    * @param args - Arguments for preparing the player.
    * @returns A promise that resolves to a boolean indicating if the player was prepared successfully.
@@ -201,6 +209,21 @@ export interface IAudioWaveforms extends NativeModule {
    * @returns A promise that resolves to a boolean indicating if all players were stopped successfully.
    */
   stopAllPlayers(): Promise<boolean>;
+
+  /**
+   * Android only
+   * Stops all waveform extractions and clean some resources. It also stops everything rate limited and reset the rate limiting queue.
+   * @returns A promise that resolves to a boolean indicating if everything was stopped successfully.
+   */
+  stopAllWaveFormExtractors(): Promise<boolean>;
+
+  /**
+   * Android only
+   * Stops all active audio players, all waveform extractions, the rate limiting queue, recording and clean some resources.
+   * Useful when needing to stop everything and start fresh like when navigating to a new screen.
+   * @returns A promise that resolves to a boolean indicating if everything was stopped successfully.
+   */
+  stopEverything(): Promise<boolean>;
 
   /**
    * Sets the playback speed of the audio.

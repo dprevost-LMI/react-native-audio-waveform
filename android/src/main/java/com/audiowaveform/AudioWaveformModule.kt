@@ -19,9 +19,10 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJavaModule(context) {
-    private var extractors = mutableMapOf<String, WaveformExtractor?>()
+    private var waveFormExtractors = mutableMapOf<String, WaveformExtractor?>()
     private var audioPlayers = mutableMapOf<String, AudioPlayer?>()
     private var audioRecorder: AudioRecorder = AudioRecorder()
     private var recorder: MediaRecorder? = null
@@ -32,6 +33,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     private var bitRate: Int = 128000
     private val handler = Handler(Looper.getMainLooper())
     private var startTime: Long = 0
+    private var waveformExtractorRateLimiter : AudioWaveformExtractorRateLimiter? = null
 
     companion object {
         const val NAME = "AudioWaveform"
@@ -42,6 +44,13 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
         return NAME
     }
 
+    @ReactMethod(isBlockingSynchronousMethod = true)
+    fun enableRateLimiting(nbOfParallelAllowedExtraction: Int = 3) {
+        if (waveformExtractorRateLimiter == null) {
+            waveformExtractorRateLimiter = AudioWaveformExtractorRateLimiter(nbOfParallelAllowedExtraction)
+        }
+    }
+
     @ReactMethod
     fun markPlayerAsUnmounted() {
         if (audioPlayers.isEmpty()) {
@@ -49,12 +58,9 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
         }
 
         audioPlayers.values.forEach { player ->
-            if (player != null) {
-                player.markPlayerAsUnmounted()
-            }
+            player?.markPlayerAsUnmounted()
         }
     }
-
 
     @ReactMethod
     fun checkHasAudioRecorderPermission(promise: Promise) {
@@ -101,7 +107,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
 
     @ReactMethod
     fun stopRecording(promise: Promise) {
-        if (audioRecorder == null || recorder == null || path == null) {
+        if (recorder == null || path == null) {
             promise.reject("STOP_RECORDING_ERROR", "Recording resources not properly initialized")
             return
         }
@@ -172,8 +178,9 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     fun stopPlayer(obj: ReadableMap, promise: Promise) {
         val key = obj.getString(Constants.playerKey)
         if (key != null) {
-            audioPlayers[key]?.stop(promise)
+            audioPlayers[key]?.stop()
             audioPlayers[key] = null // Release the player after stopping it
+            promise.resolve(true)
         } else {
             promise.reject("stopPlayer Error", "Player key can't be null")
         }
@@ -243,10 +250,42 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
     }
 
     @ReactMethod
-    fun stopAllPlayers(promise: Promise) {
-        for ((key, _) in audioPlayers) {
-            audioPlayers[key]?.stop(promise)
-            audioPlayers[key] = null
+    fun stopAllPlayers(promise: Promise? = null) {
+        try {
+            for ((key, _) in audioPlayers) {
+                audioPlayers[key]?.stop()
+                audioPlayers[key] = null
+            }
+            promise?.resolve(true);
+        } catch (e: Exception) {
+            promise?.reject("error-stopAllPlayers", e.message) ?: throw e
+        }
+    }
+
+    @ReactMethod
+    fun stopAllWaveFormExtractors(promise: Promise? = null) {
+        try {
+            waveformExtractorRateLimiter?.reset()
+
+            for ((key, _) in waveFormExtractors) {
+                waveFormExtractors[key]?.stop()
+                waveFormExtractors[key] = null
+            }
+            promise?.resolve(true);
+        } catch (e: Exception) {
+            Log.e(Constants.LOG_TAG, "Failed to stop extractors", e)
+            promise?.reject("error-stopExtractors", "Failed to stop extractors: ${e.message}") ?: throw e
+        }
+    }
+
+    @ReactMethod
+    fun stopEverything(promise: Promise) {
+        try {
+            stopAllPlayers()
+            stopAllWaveFormExtractors()
+            if (recorder != null) stopRecording(promise)
+        } catch (e: Exception) {
+            promise.reject("error-stopEverything", e.message)
         }
     }
 
@@ -288,30 +327,46 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
             promise.reject("createOrUpdateExtractor Error" , "No Path Provided")
             return
         }
-        extractors[playerKey] = WaveformExtractor(
+
+        val previousExtractor = waveFormExtractors[playerKey]
+        val newExtractor = WaveformExtractor(
             context = reactApplicationContext,
             path = path,
             expectedPoints = noOfSamples,
             key = playerKey,
-            extractorCallBack = object : ExtractorCallBack {
-                override fun onProgress(value: Float) {
-                     if (value == 1.0F) {
-                        extractors[playerKey]?.sampleData?.let { data ->
-                            val normalizedData = normalizeWaveformData(data, 0.12f)
-                            val tempArrayForCommunication: MutableList<MutableList<Float>> = mutableListOf(normalizedData)
-                            promise.resolve(Arguments.fromList(tempArrayForCommunication))
-                        }
-                    }
+            extractorCallBack =
+            object : ExtractorCallBack {
+                private var finally = AtomicBoolean(true)
+                fun onFinally() {
+                    if (finally.getAndSet(false)) waveformExtractorRateLimiter?.continueQueue()
+                    waveFormExtractors.remove(playerKey)
                 }
+
+                override fun onProgressResolve(value: Float, sample: MutableList<Float>) {
+                    val normalizedData = normalizeWaveformData(sample, 0.12f)
+                    val tempArrayForCommunication: MutableList<MutableList<Float>> =
+                        mutableListOf(normalizedData)
+                    promise.resolve(Arguments.fromList(tempArrayForCommunication))
+                    onFinally()
+                }
+
                 override fun onReject(error: String?, message: String?) {
                     promise.reject(error, message)
+                    onFinally()
                 }
+
                 override fun onResolve(value: MutableList<MutableList<Float>>) {
                     promise.resolve(Arguments.fromList(value))
+                    onFinally()
                 }
             }
         )
-        extractors[playerKey]?.startDecode();
+
+        waveFormExtractors[playerKey] = newExtractor;
+        waveformExtractorRateLimiter?.add(newExtractor, previousExtractor)
+
+        // If rate limiter is not used, we decode just like before
+        if(waveformExtractorRateLimiter == null) newExtractor.startDecode()
     }
 
     private fun normalizeWaveformData(data: MutableList<Float>, scale: Float = 0.25f, threshold: Float = 0.01f): MutableList<Float> {

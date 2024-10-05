@@ -1,4 +1,4 @@
-import { NativeEventEmitter, NativeModules } from 'react-native';
+import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { AudioWaveform } from '../AudioWaveform';
 import { NativeEvents } from '../constants';
 import {
@@ -39,6 +39,9 @@ export const useAudioPlayer = () => {
   const setVolume = (args: ISetVolume) => AudioWaveform.setVolume(args);
 
   const stopAllPlayers = () => AudioWaveform.stopAllPlayers();
+
+  const stopAllWaveFormExtractors = () =>
+    Platform.OS === 'android' && AudioWaveform.stopAllWaveFormExtractors();
 
   const getDuration = (args: IGetDuration) => AudioWaveform.getDuration(args);
 
@@ -88,6 +91,7 @@ export const useAudioPlayer = () => {
     seekToPlayer,
     setVolume,
     stopAllPlayers,
+    stopAllWaveFormExtractors,
     stopPlayer,
     onDidFinishPlayingAudio,
     onCurrentDuration,

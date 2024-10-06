@@ -89,7 +89,8 @@ const styles = (params: StyleSheetParams = {}) =>
     },
     simformImageContainer: {
       alignItems: 'center',
-      justifyContent: 'center',
+      justifyContent: 'space-around',
+      flexDirection: 'row',
     },
     loadingText: {
       color: Colors.black,

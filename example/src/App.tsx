@@ -18,6 +18,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   Pressable,
@@ -35,10 +36,12 @@ import { Icons } from './assets';
 import {
   generateAudioList,
   playbackSpeedSequence,
+  getRecordedAudio,
   type ListItem,
 } from './constants';
 import stylesheet from './styles';
 import { Colors } from './theme';
+import fs from 'react-native-fs';
 
 const RenderListItem = React.memo(
   ({
@@ -244,6 +247,31 @@ const AppContainer = () => {
     );
   };
 
+  const handleDeleteRecordings = async () => {
+    const deleteRecordings = async () => {
+      const recordings = await getRecordedAudio();
+      await Promise.all(
+        recordings.map(async recording => {
+          fs.unlink(recording);
+          console.log('deleted', recording);
+        })
+      );
+    };
+
+    Alert.alert(
+      'Delete all recording',
+      'Continue to delete all recordings.\n App restart is required!',
+      [
+        {
+          text: 'Cancel',
+          onPress: () => console.log('Cancel Pressed'),
+          style: 'cancel',
+        },
+        { text: 'OK', onPress: deleteRecordings },
+      ]
+    );
+  };
+
   return (
     <View style={styles.appContainer}>
       <StatusBar
@@ -261,6 +289,15 @@ const AppContainer = () => {
                 style={styles.simformImage}
                 resizeMode="contain"
               />
+              <Pressable
+                style={styles.playBackControlPressable}
+                onPress={handleDeleteRecordings}>
+                <Image
+                  source={Icons.delete}
+                  style={styles.buttonImage}
+                  resizeMode="contain"
+                />
+              </Pressable>
             </View>
             <ScrollView scrollEnabled={shouldScroll}>
               {list.map(item => (

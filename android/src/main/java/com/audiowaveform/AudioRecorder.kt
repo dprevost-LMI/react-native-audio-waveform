@@ -20,7 +20,7 @@ private const val RECORD_AUDIO_REQUEST_CODE = 1001
 class AudioRecorder {
     private var permissions = arrayOf(Manifest.permission.RECORD_AUDIO)
     private var useLegacyNormalization = false
-    private var isRecording = false
+    @Volatile private var isRecording = false
 
     private fun isPermissionGranted(activity: Activity?): Int? {
         return activity?.let { ActivityCompat.checkSelfPermission(it, permissions[0]) }
@@ -121,7 +121,7 @@ class AudioRecorder {
                 val tempArrayForCommunication : MutableList<String> = mutableListOf()
                 val duration = getDuration(path)
                 tempArrayForCommunication.add(path)
-                tempArrayForCommunication.add(duration.toString())
+                tempArrayForCommunication.add(duration)
                 promise.resolve(Arguments.fromList(tempArrayForCommunication))
             } else {
                 promise.reject("Error", "Recorder is not recording or has already been stopped")

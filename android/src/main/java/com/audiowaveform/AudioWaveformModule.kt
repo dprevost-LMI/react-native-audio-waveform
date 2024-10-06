@@ -437,8 +437,7 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
                 override fun onResolve(value: MutableList<MutableList<Float>>) {
                     promise.resolve(Arguments.fromList(value))
                 }
-
-                override fun onStop() {
+                override fun onForcedStop() {
                     promise.reject("EXTRACTION_STOPPED", "Waveform extraction was stopped")
                 }
             }

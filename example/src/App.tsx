@@ -125,8 +125,8 @@ const RenderListItem = React.memo(
                 }
               }}
               onPanStateChange={onPanStateChange}
-              onError={error => {
-                console.log('Error in static player', error);
+              onError={errorMessage => {
+                console.log('Error in static player:', errorMessage);
               }}
               onCurrentProgressChange={(_currentProgress, _songDuration) => {
                 // console.log(
@@ -163,34 +163,48 @@ const LivePlayerComponent = ({
   const styles = stylesheet();
   const { checkHasAudioRecorderPermission, getAudioRecorderPermission } =
     useAudioPermission();
+  const [canStopRecording, setCanStopRecording] = useState(false);
 
-  const startRecording = () => {
-    ref.current
-      ?.startRecord({
-        updateFrequency: UpdateFrequency.high,
-      })
-      .then(() => {})
-      .catch(() => {});
+  const startRecording = async () => {
+    await ref.current?.startRecord({
+      updateFrequency: UpdateFrequency.high,
+    });
+    // Recording can be stopped only after 500ms
+    setTimeout(() => {
+      setCanStopRecording(true);
+    }, 600);
   };
 
   const handleRecorderAction = async () => {
+    // Prevent multiple recording
+    if (
+      recorderState === RecorderState.starting ||
+      (recorderState === RecorderState.recording && !canStopRecording)
+    ) {
+      return;
+    }
+
     if (recorderState === RecorderState.stopped) {
+      setRecorderState(RecorderState.starting);
+
       const hasPermission = await checkHasAudioRecorderPermission();
 
       if (hasPermission === PermissionStatus.granted) {
-        startRecording();
+        await startRecording();
       } else if (hasPermission === PermissionStatus.undetermined) {
         const permissionStatus = await getAudioRecorderPermission();
         if (permissionStatus === PermissionStatus.granted) {
-          startRecording();
+          await startRecording();
         }
       } else {
-        Linking.openSettings();
+        await Linking.openSettings();
+        setRecorderState(RecorderState.stopped);
       }
-    } else {
-      ref.current?.stopRecord().then(path => {
+    } else if (canStopRecording) {
+      await ref.current?.stopRecord().then(path => {
         setList(prev => [...prev, { fromCurrentUser: true, path }]);
       });
+      setCanStopRecording(false);
     }
   };
 
@@ -207,7 +221,11 @@ const LivePlayerComponent = ({
       />
       <Pressable
         style={styles.recordAudioPressable}
-        onPress={handleRecorderAction}>
+        onPress={handleRecorderAction}
+        disabled={
+          (recorderState === RecorderState.recording && !canStopRecording) ||
+          recorderState === RecorderState.starting
+        }>
         <Image
           source={
             recorderState === RecorderState.stopped ? Icons.mic : Icons.stop
@@ -274,7 +292,6 @@ const AppContainer = () => {
 
   const stopEverything = async () => {
     const hasStoppedAll = await AudioWaveform.stopEverything();
-    console.log('hasStoppedAll', hasStoppedAll);
     Alert.alert(
       'Everything stopped',
       'All players and waveform extractors have been stopped!',

@@ -23,6 +23,7 @@ class WaveformExtractor(
     private val key: String,
     private val extractorCallBack: ExtractorCallBack,
 ): ReactContextBaseJavaModule(context) {
+    private val TAG = "WaveformExtractor"
     private var decoder: MediaCodec? = null
     private var extractor: MediaExtractor? = null
     private var duration = 0L
@@ -148,7 +149,7 @@ class WaveformExtractor(
                         }
 
                         if (info.isEof()) {
-                            stop()
+                            internalStop()
                             val tempArrayForCommunication : MutableList<MutableList<Float>> = mutableListOf()
                             tempArrayForCommunication.add(sampleData)
                             extractorCallBack.onResolve(tempArrayForCommunication)
@@ -160,7 +161,7 @@ class WaveformExtractor(
             }
 
         } catch (e: Exception) {
-            stop()
+            internalStop()
             extractorCallBack.onReject(
                 e.message , "An error is thrown before decoding the audio file"
             )
@@ -192,13 +193,13 @@ class WaveformExtractor(
 
                 // Discard redundant values and release resources
                 if (progress >= 1.0F) {
-                    stop()
+                    internalStop()
                     return true
                 }
             }
         }
         catch (e: Exception) {
-            stop()
+            internalStop()
             extractorCallBack.onReject("RMS ERROR" ,e.message)
             return true;
         }
@@ -254,6 +255,12 @@ class WaveformExtractor(
     }
 
     fun stop() {
+        internalStop()
+        // When stopped by outside we must notify to resolved the hanging promises
+        extractorCallBack.onForcedStop()
+    }
+
+    private fun internalStop() {
         if (!inProgress) return
         inProgress = false
         decoder?.stop()
@@ -269,5 +276,5 @@ interface ExtractorCallBack {
     fun onProgress(value: Float)
     fun onReject(error: String?, message: String?)
     fun onResolve(value: MutableList<MutableList<Float>>)
-    fun onStop()
+    fun onForcedStop()
 }

@@ -29,6 +29,7 @@ export enum PlayerState {
 }
 
 export enum RecorderState {
+  starting = 'starting',
   recording = 'recording',
   paused = 'paused',
   stopped = 'stopped',

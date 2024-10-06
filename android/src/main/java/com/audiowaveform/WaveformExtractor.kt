@@ -12,7 +12,6 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.modules.core.DeviceEventManagerModule
 import java.nio.ByteBuffer
-import java.util.concurrent.CountDownLatch
 import kotlin.math.pow
 import kotlin.math.sqrt
 import java.io.File
@@ -32,7 +31,6 @@ class WaveformExtractor(
 
     @Volatile
     private var inProgress = false
-    private val finishCount = CountDownLatch(1)
     private var inputEof = false
     private var sampleRate = 0
     private var channels = 1
@@ -122,7 +120,6 @@ class WaveformExtractor(
                             Constants.LOG_TAG + " " + e.message,
                             "An error is thrown while decoding the audio file"
                         )
-                        finishCount.countDown()
                     }
 
                     override fun onOutputBufferAvailable(
@@ -256,13 +253,13 @@ class WaveformExtractor(
         }
     }
 
-    private fun stop() {
+    fun stop() {
         if (!inProgress) return
         inProgress = false
         decoder?.stop()
         decoder?.release()
         extractor?.release()
-        finishCount.countDown()
+        extractorCallBack.onStop()
     }
 }
 
@@ -272,4 +269,5 @@ interface ExtractorCallBack {
     fun onProgress(value: Float)
     fun onReject(error: String?, message: String?)
     fun onResolve(value: MutableList<MutableList<Float>>)
+    fun onStop()
 }

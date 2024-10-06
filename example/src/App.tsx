@@ -42,6 +42,7 @@ import {
 import stylesheet from './styles';
 import { Colors } from './theme';
 import fs from 'react-native-fs';
+import { AudioWaveform } from '../../src/AudioWaveform';
 
 const RenderListItem = React.memo(
   ({
@@ -125,7 +126,7 @@ const RenderListItem = React.memo(
               }}
               onPanStateChange={onPanStateChange}
               onError={error => {
-                console.log(error, 'we are in example');
+                console.log('Error in static player', error);
               }}
               onCurrentProgressChange={(_currentProgress, _songDuration) => {
                 // console.log(
@@ -264,11 +265,20 @@ const AppContainer = () => {
       [
         {
           text: 'Cancel',
-          onPress: () => console.log('Cancel Pressed'),
           style: 'cancel',
         },
         { text: 'OK', onPress: deleteRecordings },
       ]
+    );
+  };
+
+  const stopEverything = async () => {
+    const hasStoppedAll = await AudioWaveform.stopEverything();
+    console.log('hasStoppedAll', hasStoppedAll);
+    Alert.alert(
+      'Everything stopped',
+      'All players and waveform extractors have been stopped!',
+      [{ text: 'OK' }]
     );
   };
 
@@ -294,6 +304,15 @@ const AppContainer = () => {
                 onPress={handleDeleteRecordings}>
                 <Image
                   source={Icons.delete}
+                  style={styles.buttonImage}
+                  resizeMode="contain"
+                />
+              </Pressable>
+              <Pressable
+                style={styles.playBackControlPressable}
+                onPress={stopEverything}>
+                <Image
+                  source={Icons.stop}
                   style={styles.buttonImage}
                   resizeMode="contain"
                 />

@@ -137,7 +137,7 @@ export interface IAudioWaveforms extends NativeModule {
    * @param args - Arguments for extracting waveform data.
    * @returns A promise that resolves to an array of arrays representing the waveform data.
    */
-  extractWaveformData(args: IExtractWaveform): Promise<Array<Array<number>>>;
+  extractWaveformData(args: IExtractWaveform): Promise<number[][]>;
 
   /**
    * Gets the decibel level of the recorded audio.
@@ -201,6 +201,18 @@ export interface IAudioWaveforms extends NativeModule {
    * @returns A promise that resolves to a boolean indicating if all players were stopped successfully.
    */
   stopAllPlayers(): Promise<boolean>;
+
+  /**
+   * Stops all active waveform extractors.
+   * @returns A promise that resolves to a boolean indicating if all players were stopped successfully.
+   */
+  stopAllWaveFormExtractors(): Promise<boolean>;
+
+  /**
+   * Stops all active audio players and waveform extractors.
+   * @returns A promise that resolves to a boolean indicating if all players and extractors were stopped successfully.
+   */
+  stopEverything(): Promise<boolean>;
 
   /**
    * Sets the playback speed of the audio.

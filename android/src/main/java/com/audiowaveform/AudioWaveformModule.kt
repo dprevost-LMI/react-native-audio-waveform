@@ -323,13 +323,45 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
         }
     }
 
+    private fun stopAllPlayers() {
+        for ((key, _) in audioPlayers) {
+            audioPlayers[key]?.stop()
+            audioPlayers[key] = null
+        }
+    }
     @ReactMethod
     fun stopAllPlayers(promise: Promise) {
         try {
-            for ((key, _) in audioPlayers) {
-                audioPlayers[key]?.stop()
-                audioPlayers[key] = null
-            }
+            stopAllPlayers();
+        }
+        catch (err:Exception) {
+            promise.reject("stopAllPlayers-error", "Error while stopping all players")
+        }
+    }
+
+    private fun stopAllExtractors() {
+        for ((key, _) in extractors) {
+            extractors[key]?.stop()
+            extractors[key] = null
+        }
+    }
+
+    @ReactMethod
+    fun stopAllWaveFormExtractors(promise: Promise) {
+        try {
+            stopAllExtractors()
+            promise.resolve(true)
+        }
+        catch (err:Exception) {
+            promise.reject("stopAllPlayers-error", "Error while stopping all players")
+        }
+    }
+
+    @ReactMethod
+    fun stopEverything(promise: Promise) {
+        try {
+            stopAllPlayers()
+            stopAllExtractors()
             promise.resolve(true)
         }
         catch (err:Exception) {
@@ -404,6 +436,10 @@ class AudioWaveformModule(context: ReactApplicationContext): ReactContextBaseJav
                 }
                 override fun onResolve(value: MutableList<MutableList<Float>>) {
                     promise.resolve(Arguments.fromList(value))
+                }
+
+                override fun onStop() {
+                    promise.reject("EXTRACTION_STOPPED", "Waveform extraction was stopped")
                 }
             }
         )

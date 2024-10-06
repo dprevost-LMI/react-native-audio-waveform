@@ -37,8 +37,11 @@ export const useAudioPlayer = () => {
     NativeModules.AudioWaveformsEventEmitter
   );
 
-  const extractWaveformData = (args: IExtractWaveform) =>
-    AudioWaveform.extractWaveformData(args);
+  const extractWaveformData = (args: IExtractWaveform): Promise<number[][]> =>
+    logPromise(
+      () => AudioWaveform.extractWaveformData(args),
+      'extractWaveformData'
+    );
 
   const preparePlayer = (args: IPreparePlayer) =>
     logPromise(() => AudioWaveform.preparePlayer(args), 'preparePlayer');

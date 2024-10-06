@@ -42,7 +42,10 @@ import {
 import stylesheet from './styles';
 import { Colors } from './theme';
 import fs from 'react-native-fs';
-import { AudioWaveform } from '../../src/AudioWaveform';
+
+const getFilenameFromPath = (path: string): string => {
+  return path.split('/').pop() || '';
+};
 
 const RenderListItem = React.memo(
   ({
@@ -64,6 +67,9 @@ const RenderListItem = React.memo(
     const [playerState, setPlayerState] = useState(PlayerState.stopped);
     const styles = stylesheet({ currentUser: item.fromCurrentUser });
     const [isLoading, setIsLoading] = useState(true);
+    const waveFormDataFileName = `${
+      fs.CachesDirectoryPath
+    }/${getFilenameFromPath(item.path)}_wf.json`;
 
     const handleButtonAction = () => {
       if (playerState === PlayerState.stopped) {
@@ -136,6 +142,7 @@ const RenderListItem = React.memo(
               onChangeWaveformLoadState={state => {
                 setIsLoading(state);
               }}
+              waveFormFilePath={waveFormDataFileName}
             />
             {playerState === PlayerState.playing ? (
               <Pressable

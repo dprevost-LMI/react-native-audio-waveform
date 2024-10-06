@@ -1,35 +1,47 @@
 import { AudioWaveform } from '../AudioWaveform';
 import type { IStartRecording } from '../types';
+import { isNil } from 'lodash';
 
-let nbOfPromises = 0;
-
-const logPromise = async (promise: any, promiseName: string) => {
-  try {
-    nbOfPromises++;
-    console.log(`Promise ${promiseName} has been called`);
-    return await promise();
-  } finally {
-    nbOfPromises--;
-    console.log(`Promise ${promiseName} has finished`);
-    if (nbOfPromises > 0)
-      console.log(`Number of promises remaining: ${nbOfPromises}`);
-  }
-};
+export interface IStoppedAudioRecordingData {
+  path: string;
+  duration: string;
+}
 
 export const useAudioRecorder = () => {
   const startRecording = (args?: Partial<IStartRecording>) =>
     AudioWaveform.startRecording(args);
 
-  const stopRecording = (): Promise<string> =>
-    logPromise(AudioWaveform.stopRecording, 'stopRecording');
+  const stopRecording = async (): Promise<IStoppedAudioRecordingData> => {
+    const pathAndDurationArray = await AudioWaveform.stopRecording();
+    const path = pathAndDurationArray[0];
+    const duration = pathAndDurationArray[1];
+    if (!!path && !!duration) {
+      return { path, duration };
+    }
+    throw new Error(
+      `Stop recoding error: Invalid path [${path}] and/or duration [${duration}]`
+    );
+  };
 
-  const pauseRecording = () =>
-    logPromise(AudioWaveform.pauseRecording, 'pauseRecording');
+  const pauseRecording = async () => {
+    const paused = await AudioWaveform.pauseRecording();
 
-  const resumeRecording = () =>
-    logPromise(AudioWaveform.resumeRecording, 'resumeRecording');
+    if (!isNil(paused))
+      throw new Error('Pause recording error: paused is null or undefined');
 
-  const getDecibel = () => logPromise(AudioWaveform.getDecibel, 'getDecibel');
+    return paused;
+  };
+
+  const resumeRecording = async () => {
+    const resumed = await AudioWaveform.resumeRecording();
+
+    if (isNil(resumed))
+      throw new Error('Resume recording error: resumed is null or undefined');
+
+    return resumed;
+  };
+
+  const getDecibel = () => AudioWaveform.getDecibel();
 
   return {
     getDecibel,

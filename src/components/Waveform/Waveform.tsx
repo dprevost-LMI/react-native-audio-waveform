@@ -59,6 +59,7 @@ export const Waveform = forwardRef<IWaveformRef, IWaveform>((props, ref) => {
     onCurrentProgressChange = () => {},
     candleHeightScale = 3,
     onChangeWaveformLoadState = (_state: boolean) => {},
+    waveFormFilePath = '',
   } = props as StaticWaveform & LiveWaveform;
   const viewRef = useRef<View>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -90,6 +91,8 @@ export const Waveform = forwardRef<IWaveformRef, IWaveform>((props, ref) => {
     onCurrentRecordingWaveformData,
     setPlaybackSpeed,
     markPlayerAsUnmounted,
+    readWaveformDataFromFile,
+    writeWaveformDataToFile,
   } = useAudioPlayer();
 
   const { startRecording, stopRecording, pauseRecording, resumeRecording } =
@@ -165,20 +168,32 @@ export const Waveform = forwardRef<IWaveformRef, IWaveform>((props, ref) => {
       try {
         onChangeWaveformLoadState(true);
 
-        const result = await extractWaveformData({
-          path: path,
-          playerKey: `PlayerFor${path}`,
-          noOfSamples: noOfSample,
-        });
+        let waveforms = waveFormFilePath
+          ? await readWaveformDataFromFile(waveFormFilePath)
+          : undefined;
+
+        const extractedData = isEmpty(waveforms)
+          ? head(
+              await extractWaveformData({
+                path: path,
+                playerKey: `PlayerFor${path}`,
+                noOfSamples: noOfSample,
+              })
+            ) ?? undefined
+          : undefined;
 
         onChangeWaveformLoadState(false);
 
-        if (!isNil(result) && !isEmpty(result)) {
-          const waveforms = head(result);
-          if (!isNil(waveforms) && !isEmpty(waveforms)) {
-            setWaveform(waveforms);
-            await preparePlayerAndGetDuration();
+        if (extractedData) {
+          waveforms = extractedData;
+          if (waveFormFilePath) {
+            await writeWaveformDataToFile(waveFormFilePath, waveforms);
           }
+        }
+
+        if (!isNil(waveforms) && !isEmpty(waveforms)) {
+          setWaveform(waveforms);
+          await preparePlayerAndGetDuration();
         }
       } catch (err) {
         onChangeWaveformLoadState(false);
@@ -303,85 +318,48 @@ export const Waveform = forwardRef<IWaveformRef, IWaveform>((props, ref) => {
 
   const stopRecordingAction = async () => {
     if (mode === 'live') {
-      try {
-        const data = await stopRecording();
-        if (!isNil(data) && !isEmpty(data)) {
-          setWaveform([]);
-          const pathData = head(data);
-          if (!isNil(pathData)) {
-            setRecorderState(RecorderState.stopped);
-            return Promise.resolve(pathData);
-          } else {
-            return Promise.reject(
-              new Error(
-                'error in stopping recording. can not get path of recording'
-              )
-            );
-          }
-        } else {
-          return Promise.reject(
-            new Error(
-              'error in stopping recording. can not get path of recording'
-            )
-          );
-        }
-      } catch (err) {
-        return Promise.reject(err);
-      }
-    } else {
-      return Promise.reject(
-        new Error('error in stop recording: mode is not live')
-      );
+      const { path: recordingPath } = await stopRecording();
+
+      setWaveform([]);
+      setRecorderState(RecorderState.stopped);
+
+      return recordingPath;
     }
+
+    throw new Error('error in stop recording: mode is not live');
   };
 
   const pauseRecordingAction = async () => {
     if (mode === 'live') {
-      try {
-        const pause = await pauseRecording();
-        if (!isNil(pause) && pause) {
-          setRecorderState(RecorderState.paused);
-          return Promise.resolve(pause);
-        } else {
-          return Promise.reject(new Error('Error in pausing recording audio'));
-        }
-      } catch (err) {
-        return Promise.reject(err);
+      const pause = await pauseRecording();
+      if (pause) {
+        setRecorderState(RecorderState.paused);
+        return pause;
       }
-    } else {
-      return Promise.reject(
-        new Error('error in pause recording: mode is not live')
-      );
+      throw new Error('Error in pausing recording audio');
     }
+    throw new Error('Error in pause recording: mode is not live');
   };
 
   const resumeRecordingAction = async () => {
     if (mode === 'live') {
-      try {
-        const hasPermission = await checkHasAudioRecorderPermission();
-        if (hasPermission === PermissionStatus.granted) {
-          const resume = await resumeRecording();
-          if (!isNil(resume)) {
-            setRecorderState(RecorderState.recording);
-            return Promise.resolve(resume);
-          } else {
-            return Promise.reject(new Error('Error in resume recording'));
-          }
-        } else {
-          return Promise.reject(
-            new Error(
-              'error in resume recording: audio recording permission is not granted'
-            )
-          );
+      const hasPermission = await checkHasAudioRecorderPermission();
+      if (hasPermission === PermissionStatus.granted) {
+        const resume = await resumeRecording();
+        if (!isNil(resume)) {
+          setRecorderState(RecorderState.recording);
+          return resume;
         }
-      } catch (err) {
-        return Promise.reject(err);
+
+        throw new Error('Error in resume recording');
       }
-    } else {
-      return Promise.reject(
-        new Error('error in resume recording: mode is not live')
+
+      throw new Error(
+        'error in resume recording: audio recording permission is not granted'
       );
     }
+
+    throw new Error('error in resume recording: mode is not live');
   };
 
   useEffect(() => {

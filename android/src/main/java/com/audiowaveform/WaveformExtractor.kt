@@ -266,7 +266,6 @@ class WaveformExtractor(
         decoder?.stop()
         decoder?.release()
         extractor?.release()
-        extractorCallBack.onStop()
     }
 }
 

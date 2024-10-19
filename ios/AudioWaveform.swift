@@ -236,6 +236,14 @@ class AudioWaveform: RCTEventEmitter {
     resolve(true)
   }
   
+  @objc func stopAllWaveFormExtractors(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) -> Void {
+    for (extractorKey,_) in extractors{
+      extractors[extractorKey]?.cancel()
+    }
+    extractors.removeAll()
+    resolve(true)
+  }
+  
   
   func getUpdateFrequency(freq: Int?) -> Int{
     if(freq == 2){

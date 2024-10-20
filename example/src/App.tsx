@@ -8,6 +8,7 @@ import {
   UpdateFrequency,
   Waveform,
   useAudioPermission,
+  useAudioPlayer,
 } from '@simform_solutions/react-native-audio-waveform';
 import React, {
   Dispatch,
@@ -18,6 +19,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Linking,
   Pressable,
@@ -39,6 +41,7 @@ import {
 } from './constants';
 import stylesheet from './styles';
 import { Colors } from './theme';
+import { useAudioRecorder } from '../../src/hooks';
 
 const RenderListItem = React.memo(
   ({
@@ -122,14 +125,11 @@ const RenderListItem = React.memo(
               }}
               onPanStateChange={onPanStateChange}
               onError={error => {
-                console.log(error, 'we are in example');
+                console.log('Error in static player:', error);
               }}
               onCurrentProgressChange={(currentProgress, songDuration) => {
                 console.log(
-                  'currentProgress ',
-                  currentProgress,
-                  'songDuration ',
-                  songDuration
+                  `currentProgress ${currentProgress}, songDuration ${songDuration}`
                 );
               }}
               onChangeWaveformLoadState={state => {
@@ -247,6 +247,25 @@ const AppContainer = () => {
     );
   };
 
+  const handleStopPlayersAndExtractors = async () => {
+    const { stopPlayersAndExtractors } = useAudioPlayer();
+    const hasStoppedAll: boolean[] = await stopPlayersAndExtractors();
+
+    if (hasStoppedAll.every(Boolean)) {
+      Alert.alert(
+        'Everything stopped',
+        'All players and extractors have been stopped!',
+        [{ text: 'OK' }]
+      );
+    } else {
+      Alert.alert(
+        'Error stopping everything',
+        'An error occurred when trying to stop players or extractors',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   return (
     <View style={styles.appContainer}>
       <StatusBar
@@ -264,6 +283,15 @@ const AppContainer = () => {
                 style={styles.simformImage}
                 resizeMode="contain"
               />
+              <Pressable
+                style={styles.playBackControlPressable}
+                onPress={handleStopPlayersAndExtractors}>
+                <Image
+                  source={Icons.stop}
+                  style={styles.buttonImage}
+                  resizeMode="contain"
+                />
+              </Pressable>
             </View>
             <ScrollView scrollEnabled={shouldScroll}>
               {list.map(item => (

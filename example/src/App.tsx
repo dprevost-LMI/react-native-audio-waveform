@@ -41,7 +41,6 @@ import {
 } from './constants';
 import stylesheet from './styles';
 import { Colors } from './theme';
-import { useAudioRecorder } from '../../src/hooks';
 
 const RenderListItem = React.memo(
   ({

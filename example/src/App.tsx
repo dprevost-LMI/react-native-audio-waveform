@@ -287,7 +287,7 @@ const AppContainer = () => {
                 onPress={handleStopPlayersAndExtractors}>
                 <Image
                   source={Icons.stop}
-                  style={styles.buttonImage}
+                  style={styles.stopAllButton}
                   resizeMode="contain"
                 />
               </Pressable>

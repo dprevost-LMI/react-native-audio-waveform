@@ -51,6 +51,12 @@ const styles = (params: StyleSheetParams = {}) =>
       tintColor: Colors.white,
       alignSelf: 'flex-end',
     },
+    stopAllButton: {
+      height: scale(22),
+      width: scale(22),
+      tintColor: Colors.pink,
+      alignSelf: 'flex-end',
+    },
     staticWaveformView: {
       flex: 1,
       height: scale(75),
